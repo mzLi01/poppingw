@@ -29,11 +29,11 @@ def plot_nsigma_pz(posterior: pd.DataFrame, z_array: np.ndarray, event_zs: np.nd
     pz.parameters = bestfit_params
     fit_pz = pz(z_array)
 
-    bin_count, bin_edge, _ = plt.hist(
+    plt.hist(
         event_zs, bins=nbins, histtype='step',
         density=hist_normalize, label='all events')
     if not hist_normalize:
-        normalization = np.trapz(bin_count, (bin_edge[:-1]+bin_edge[1:])/2)
+        normalization = N_total_true/nbins * (pz.z_range[1]-pz.z_range[0])
     else:
         normalization = 1.
 
@@ -43,11 +43,9 @@ def plot_nsigma_pz(posterior: pd.DataFrame, z_array: np.ndarray, event_zs: np.nd
         pz.parameters = posterior.iloc[i].to_dict()
         Ntot_norm = posterior.iloc[i][Ntot_key] / N_total_true
         ax.plot(z_array, pz(z_array)*normalization*Ntot_norm, color='gray', alpha=0.1, zorder=0)
-    ax.plot(z_array, true_pz*normalization, label='true pz')
+    ax.plot(z_array, true_pz*normalization, label='true distribution')
     ax.plot(z_array, fit_pz*normalization * bestfit_params[Ntot_key]/N_total_true, label='best fit')
 
-    ax.legend()
-    ax.set_xlabel('z')
     ax.set_xlim(z_array[0], z_array[-1])
 
     if save_path is not None:

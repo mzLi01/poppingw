@@ -24,8 +24,7 @@ parser.add_argument("--posterior-path", type=str)
 parser.add_argument("--fmin", default=2., type=float)
 parser.add_argument("--dL-shape", default=100, type=int)
 parser.add_argument("--iota-shape", default=100, type=int)
-args = parser.parse_args('--events-path result/newest/events10000.h5 --fisher-path result/newest/fisher10000.npz --logl-path tmplogl.npz --posterior-path tmppost.npz \
-    --Ncalc 1 --netfile detectors/ET_2CE_gwfast.json'.split())
+args = parser.parse_args()
 
 events = load_catalog(args.events_path)
 fisher_data = np.load(args.fisher_path)
@@ -124,7 +123,7 @@ p_log_dL = []
 log_dL_array = []
 cos_iota_grid_all = np.cos(all_iota)
 log_dL_grid_all = np.log(all_dL)
-for i in range(all_logl.shape[0]):
+for i in range(Ncalc):
     log_l_grid = all_logl[i]
     log_l_grid -= np.max(log_l_grid)
     log_dL_array_i = log_dL_grid_all[i, 0, :]
@@ -135,4 +134,16 @@ for i in range(all_logl.shape[0]):
     p_log_dL.append(p_log_dL_i)
     log_dL_array.append(log_dL_array_i)
 
-np.savez(args.posterior_path, p_log_dL=p_log_dL, log_dL=log_dL_array)
+p_log_dL = np.array(p_log_dL)
+log_dL_array = np.array(log_dL_array)
+
+Mz = events['Mc'].to_numpy()
+Mz_2d = Mz[:,None] * np.ones_like(log_dL_array)
+log_kappa_array = 5/6*np.log(Mz_2d) - log_dL_array
+log_kappa_array = log_kappa_array[:, ::-1]
+
+log_kappa_posterior = p_log_dL[:, ::-1]
+norm = np.array([simps(log_kappa_posterior[i], log_kappa_array[i]) for i in range(Ncalc)])
+log_kappa_posterior = log_kappa_posterior / norm[:, None]
+
+np.savez(args.posterior_path, p_log_dL=p_log_dL, log_dL=log_dL_array, log_kappa=log_kappa_array, p_log_kappa=log_kappa_posterior)

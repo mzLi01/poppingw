@@ -72,20 +72,21 @@ def get_pz_exp_pow(cosmo: Cosmology, z_range: Tuple[float, float] = (0.001, 6),
 
 
 class RedshiftPriorSpline(RedshiftPrior):
-    def __init__(self, cosmo: Cosmology, z_control: np.ndarray, z_range: Tuple[float, float], interp_array_len: int = 1000) -> None:
+    def __init__(self, cosmo: Cosmology, z_control: np.ndarray, z_range: Tuple[float, float]) -> None:
         self.z_control = z_control
         parameter_keys = [f'pz{i}' for i in range(len(z_control))]
 
-        super().__init__(cosmo, parameter_keys, merger_rate=None, z_range=z_range, interp_array_len=interp_array_len)
+        super().__init__(cosmo, parameter_keys, merger_rate=None, z_range=z_range)
 
     def _update_pz_interp(self, normalize: bool = True):
         self.pz_control = np.array([self.parameters[key] for key in self.parameter_keys])
-        self.interp = InterpolatedUnivariateSpline(self.z_control, self.pz_control)
+        self.interp = InterpolatedUnivariateSpline(self.z_control, self.pz_control, ext='zeros')
+        self.norm = 1
         if normalize:
-            self.norm = self.interp.integral(*self.z_range)
-        else:
-            self.norm = 1
-    
+            z_array = np.linspace(*self.z_range, 1000)
+            pz_array = self(z_array)
+            self.norm = np.trapz(pz_array, z_array)
+
     def __call__(self, z: np.ndarray) -> np.ndarray:
         pz_values = self.interp(z) / self.norm
         pz_values[pz_values<0] = 0
