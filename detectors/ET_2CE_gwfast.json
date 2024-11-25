@@ -1,0 +1,23 @@
+{
+    "ETS": {
+        "lat": 40.516666666666666,
+        "long": 9.416666666666666,
+        "xax": 0.0,
+        "shape": "T",
+        "psd_path": "/home/limz/23-fgclean/detectors/psds/ET-0000A-18.txt"
+    },
+    "CE1Id": {
+        "lat": 43.827,
+        "long": -112.825,
+        "xax": -45.0,
+        "shape": "L",
+        "psd_path": "/home/limz/23-fgclean/detectors/psds/ce_strain/cosmic_explorer.txt"
+    },
+    "CE2NSW": {
+        "lat": -34.0,
+        "long": 145.0,
+        "xax": 0.0,
+        "shape": "L",
+        "psd_path": "/home/limz/23-fgclean/detectors/psds/ce_strain/cosmic_explorer.txt"
+    }
+}
