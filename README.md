@@ -24,7 +24,7 @@ Two independent catalogs are needed for population inference, one catalog "infer
 
 ### Calculate Likelihood
 
-See [match_filter_likelihood.py](/match_filter_likelihood.py). Provide the "infer" catalog and  configurations of the detector network (see [detectors/ET_2CE_gwfast.json](detectors/ET_2CE_gwfast.json) for an example) and $\log\kappa  $ - $\cos\iota$ 2D grid, this script will calculate and store 2D log-likelihood $\log\mathcal{L}(\kappa,\iota|d)$ and 1D likelihood $\mathcal{L}(\kappa|d)$ for each event.
+See [match_filter_likelihood.py](/match_filter_likelihood.py). Provide the "infer" catalog and configurations of the detector network (see [detectors/ET_2CE_gwfast.json](detectors/ET_2CE_gwfast.json) for an example) and $\log\kappa$ - $\cos\iota$ 2D grid, this script will calculate and store 2D log-likelihood $\log\mathcal{L}(\kappa,\iota|d)$ and 1D likelihood $\mathcal{L}(\kappa|d)$ for each event.
 
 If `range.npz` is provided with argument `--range-path`, the log-likelihood is calculated on uniformly separated $\log\kappa,\cos\iota$ 2D grid. The grid size is defined by values of the arguments `--dL-shape` and `--iota-shape`, default to be $100\times 100$. Insteadly, you can also provide `grid.npz` through argument `--grid-path`, which defines $P\times Q$ grid for the events. `grid.npz` also contains keys `log_kappa` and `cos_iota`, shape os both are $(N,P,Q)$. If provided, the arguments `--range-path`, `--dL-shape` and `--iota-shape` will be ignored.
 
