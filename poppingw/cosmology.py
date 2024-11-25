@@ -32,5 +32,9 @@ class Cosmology:
     def ddL_dz(self, z: np.ndarray):
         return (1+z) * self.cosmo._hubble_distance.to_value(self.unit) * self.cosmo.inv_efunc(z) + self.chi_from_z(z)
 
+    @property
+    def H0_si(self):
+        return self.cosmo.H0.to_value(units.s**-1)
+
 
 planck = Cosmology(Planck18, 0, 6, 1000)

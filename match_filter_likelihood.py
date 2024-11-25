@@ -7,58 +7,58 @@ from schwimmbad import MPIPool
 import numpy as np
 from scipy.integrate import simps
 
-from gwfast.waveforms import IMRPhenomD
+from gwfast.waveforms import IMRPhenomD, TaylorF2_RestrictedPN
 
-from poppingw import planck
 from poppingw.gwfast import GWSignalExtended, DetNetExtended
 from poppingw.utils import load_catalog
 
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--events-path", type=str)
-parser.add_argument("--fisher-path", type=str)
+parser.add_argument("--range-path", type=str, default='')
+parser.add_argument("--grid-path", type=str, default='')
 parser.add_argument("--netfile", type=str)
+parser.add_argument("--Nstart", default=0, type=int)
 parser.add_argument("--Ncalc", default=-1, type=int)
-parser.add_argument("--logl-path", type=str)
-parser.add_argument("--posterior-path", type=str)
+parser.add_argument("--logl-path", type=str, default='')
+parser.add_argument("--likelihood-path", type=str)
+parser.add_argument("--noise-scale-sqr", default=0.25, type=float)
 parser.add_argument("--fmin", default=2., type=float)
 parser.add_argument("--dL-shape", default=100, type=int)
 parser.add_argument("--iota-shape", default=100, type=int)
 args = parser.parse_args()
 
 events = load_catalog(args.events_path)
-fisher_data = np.load(args.fisher_path)
 
-snrs = fisher_data['snr']
-fishers = fisher_data['fisher']
-
+Nstart: int = args.Nstart
 Ncalc: int = args.Ncalc
 if Ncalc == -1:
-    Ncalc = events.shape[0]
+    Ncalc = events.shape[0] - Nstart
+Nend = Nstart + Ncalc
 
+events = events.iloc[Nstart:Nend]
 
-signal = IMRPhenomD()
+signal = TaylorF2_RestrictedPN()
 id2para = {v: k for k, v in signal.ParNums.items()}
 para = [id2para[i] for i in range(len(id2para))]
 
-para_nospin = [i for i in para if i not in ['chi1z', 'chi2z']]
-index_nospin = [signal.ParNums[p] for p in para_nospin]
-fishers = fishers[index_nospin, :, :][:, index_nospin, :]
-para2id = {para_i: i for i, para_i in enumerate(para_nospin)}
 
-# convert iota to cos iota
-iota_i = para2id['iota']
-mult = -1/np.sin(events['iota'].to_numpy())
-fishers[iota_i, :, :] *= mult
-fishers[:, iota_i, :] *= mult
+if args.grid_path:
+    grid_data = np.load(args.grid_path)
+    log_kappa_array_total = grid_data['log_kappa'][Nstart:Nend]
+    cos_iota_array_total = grid_data['cos_iota'][Nstart:Nend]
+else:
+    if not args.range_path:
+        raise ValueError('range-path is required if grid-path is not provided') 
+    range_data = np.load(args.range_path)
+    log_kappa_range = range_data['log_kappa']
+    cos_iota_range = range_data['cos_iota']
 
-# convert dL to log dL:
-dL = events['dL'].to_numpy()
-dL_i = para2id['dL']
-fishers[dL_i, :, :] *= dL
-fishers[:, dL_i, :] *= dL
+    log_kappa_array_total = np.array([np.linspace(*log_kappa_range[i], args.dL_shape) for i in range(Ncalc)])
+    cos_iota_array_total = np.array([np.linspace(*cos_iota_range[i], args.iota_shape) for i in range(Ncalc)])
 
-covs = np.linalg.inv(fishers.astype(np.float64).transpose(2, 0, 1))
+Mc = events['Mc'].to_numpy()
+log_dL_array_total = (5/6)*np.log(Mc[:,np.newaxis]) - log_kappa_array_total
 
 
 with open(args.netfile, 'r') as f:
@@ -73,32 +73,22 @@ signals = {
 }
 network = DetNetExtended(signals, verbose=False)
 
-log_dL_range = tuple(np.log(planck.dL_from_z(np.array([0.001, 6]))))
-
 
 def wrapper(i):
     params1 = events.iloc[i].to_dict()
     for para in ['z', 'M1', 'M2']:
         params1.pop(para)
 
-    covi = covs[i, :, :]
-    sigma_log_dL = covi[signal.ParNums['dL'], signal.ParNums['dL']]**0.5
-
-    log_dL_real = np.log(params1['dL'])
-    log_dL_array = np.linspace(
-        max(log_dL_real-3*sigma_log_dL, log_dL_range[0]),
-        min(log_dL_real+3*sigma_log_dL, log_dL_range[1]),
-        args.dL_shape)
-    cos_iota_array = np.linspace(-1, 1, args.iota_shape)
-    dL_grid, iota_grid = np.meshgrid(np.exp(log_dL_array), np.arccos(cos_iota_array))
+    dL_grid, iota_grid = np.meshgrid(np.exp(log_dL_array_total[i]), np.arccos(cos_iota_array_total[i]))
     params2 = {k: np.array([v]*args.dL_shape*args.iota_shape) for k, v in params1.items()}
-    params2['dL'] = dL_grid.flatten()
-    params2['iota'] = iota_grid.flatten()
 
     params1 = {k: np.array([v]) for k, v in params1.items()}
 
-    log_l = network.log_likelihood(params1, params2)
-    return dL_grid, iota_grid, log_l.reshape(dL_grid.shape)
+    params2['dL'] = dL_grid.flatten()
+    params2['iota'] = iota_grid.flatten()
+
+    log_l = network.log_likelihood(params1, params2, noise_scale=np.sqrt(args.noise_scale_sqr))
+    return {key: logli.reshape(dL_grid.shape) for key, logli in log_l.items()}
 
 pool = MPIPool()
 if not pool.is_master():
@@ -107,43 +97,34 @@ if not pool.is_master():
 
 start = datetime.now()
 results = pool.map(wrapper, range(Ncalc))
+# results = [wrapper(i) for i in range(Ncalc)]
 end = datetime.now()
 print('Elapsed time: ', end-start)
 
 pool.close()
 
-all_dL = np.array([res[0] for res in results])
-all_iota = np.array([res[1] for res in results])
-all_logl = np.array([res[2] for res in results])
+all_logl = np.array([np.sum(list(res.values()), axis=0) for res in results])
 
-np.savez(args.logl_path, dL=all_dL, iota=all_iota, logl=all_logl)
+if args.logl_path:
+    save_logl = {f'logl_{key}': [res[key] for res in results] for key in network.signals.keys()}
+    np.savez(args.logl_path, log_kappa=log_kappa_array_total, cos_iota=cos_iota_array_total, logl=all_logl, **save_logl)
 
-# calculate log dL posterior
+# calculate log dL likelihood
 p_log_dL = []
-log_dL_array = []
-cos_iota_grid_all = np.cos(all_iota)
-log_dL_grid_all = np.log(all_dL)
 for i in range(Ncalc):
     log_l_grid = all_logl[i]
     log_l_grid -= np.max(log_l_grid)
-    log_dL_array_i = log_dL_grid_all[i, 0, :]
-    cos_iota_array = cos_iota_grid_all[i, :, 0]
+    log_dL_array_i = log_dL_array_total[i, ::-1]
+    cos_iota_array = cos_iota_array_total[i]
 
-    p_log_dL_i = simps(np.exp(log_l_grid), cos_iota_array, axis=0)
+    p_log_dL_i = simps(np.exp(log_l_grid[:, ::-1]), cos_iota_array, axis=0)
     p_log_dL_i /= simps(p_log_dL_i, log_dL_array_i)
     p_log_dL.append(p_log_dL_i)
-    log_dL_array.append(log_dL_array_i)
 
 p_log_dL = np.array(p_log_dL)
-log_dL_array = np.array(log_dL_array)
 
-Mz = events['Mc'].to_numpy()
-Mz_2d = Mz[:,None] * np.ones_like(log_dL_array)
-log_kappa_array = 5/6*np.log(Mz_2d) - log_dL_array
-log_kappa_array = log_kappa_array[:, ::-1]
+p_log_kappa = p_log_dL[:, ::-1]
+norm = np.array([simps(p_log_kappa[i], log_kappa_array_total[i]) for i in range(Ncalc)])
+p_log_kappa = p_log_kappa / norm[:, None]
 
-log_kappa_posterior = p_log_dL[:, ::-1]
-norm = np.array([simps(log_kappa_posterior[i], log_kappa_array[i]) for i in range(Ncalc)])
-log_kappa_posterior = log_kappa_posterior / norm[:, None]
-
-np.savez(args.posterior_path, p_log_dL=p_log_dL, log_dL=log_dL_array, log_kappa=log_kappa_array, p_log_kappa=log_kappa_posterior)
+np.savez(args.likelihood_path, p_log_dL=p_log_dL, log_dL=log_dL_array_total, log_kappa=log_kappa_array_total, p_log_kappa=p_log_kappa)

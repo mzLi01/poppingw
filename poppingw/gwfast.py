@@ -1,11 +1,12 @@
 import numpy as onp
 import jax.numpy as np
+from scipy.integrate import simps
 
 from gwfast.signal import GWSignal
 from gwfast.network import DetNet
 from gwfast import gwfastUtils as utils
 
-from .utils import create_white_noise
+from .utils import create_gaussian_noise
 
 from typing import Dict, Union
 
@@ -122,14 +123,15 @@ class GWSignalExtended(GWSignal):
             strainGrids = np.interp(fgrids, self.strainFreq, self.noiseCurve, left=1., right=1.)
             return fgrids, strainGrids
 
-    def log_likelihood_from_strain(self, f, strain1, strain2, noise, psd) -> np.ndarray:
+    def log_likelihood_from_strain(self, f, strain1, strain2, noise, psd_sqrt) -> np.ndarray:
         ifo_strain = np.array([strain1[:, 0]+noise]).T
-        integrand = np.abs(ifo_strain-strain2)**2 / psd
-        return -2. * np.trapz(integrand, f, axis=0)
+        integrand = np.abs((ifo_strain/psd_sqrt) - (strain2/psd_sqrt))**2
+        return -2 * simps(integrand, f, axis=0)
 
-    def waveform_log_likelihood(self, params1: ParamsTypeInput, params2: ParamsTypeInput, res:int=1000,
-                                use_m1m2: bool=False, use_chi1chi2: bool=True, use_prec_ang: bool=True) -> np.ndarray:
+    def waveform_log_likelihood(self, params1: ParamsTypeInput, params2: ParamsTypeInput, res: int = 1000,
+                                noise_scale: float = 0.5, use_m1m2: bool = False, use_chi1chi2: bool = True, use_prec_ang: bool = True) -> np.ndarray:
         fgrids, psd = self._get_f_psd_array(params1, res)
+        psd_sqrt = psd ** 0.5
 
         params1 = self._convert_parameters_strain(params1, use_m1m2, use_chi1chi2, use_prec_ang)
         params2 = self._convert_parameters_strain(params2, use_m1m2, use_chi1chi2, use_prec_ang)
@@ -137,8 +139,8 @@ class GWSignalExtended(GWSignal):
         if self.detector_shape == 'L':
             strain1 = self.GWstrain(fgrids, **params1, is_m1m2=use_m1m2, is_chi1chi2=use_chi1chi2, is_prec_ang=use_prec_ang)
             strain2 = self.GWstrain(fgrids, **params2, is_m1m2=use_m1m2, is_chi1chi2=use_chi1chi2, is_prec_ang=use_prec_ang)
-            noise = create_white_noise(fgrids[:, 0], psd[:, 0])
-            return self.log_likelihood_from_strain(fgrids, strain1, strain2, noise, psd)
+            noise = create_gaussian_noise(fgrids[:, 0], psd[:, 0], scale=noise_scale)
+            return self.log_likelihood_from_strain(fgrids, strain1, strain2, noise, psd_sqrt)
         else:
             log_l = []
             strain1 = []
@@ -147,8 +149,8 @@ class GWSignalExtended(GWSignal):
             for i in range(2):
                 strain1_i = self.GWstrain(fgrids, **params1, rot=i*60., is_m1m2=use_m1m2, is_chi1chi2=use_chi1chi2, is_prec_ang=use_prec_ang)
                 strain2_i = self.GWstrain(fgrids, **params2, rot=i*60., is_m1m2=use_m1m2, is_chi1chi2=use_chi1chi2, is_prec_ang=use_prec_ang)
-                noise_i = create_white_noise(fgrids[:, 0], psd[:, 0])
-                log_l.append(self.log_likelihood_from_strain(fgrids, strain1_i, strain2_i, noise_i, psd))
+                noise_i = create_gaussian_noise(fgrids[:, 0], psd[:, 0], scale=noise_scale)
+                log_l.append(self.log_likelihood_from_strain(fgrids, strain1_i, strain2_i, noise_i, psd_sqrt))
                 strain1.append(strain1_i)
                 strain2.append(strain2_i)
                 noises.append(noise_i)
@@ -160,8 +162,8 @@ class GWSignalExtended(GWSignal):
                 strain1_3 = -onp.sum(strain1, axis=0)
                 strain2_3 = -onp.sum(strain2, axis=0)
             noise_3 = -onp.sum(noises, axis=0)
-            log_l.append(self.log_likelihood_from_strain(fgrids, strain1_3, strain2_3, noise_3, psd))
-            return onp.sum(log_l)
+            log_l.append(self.log_likelihood_from_strain(fgrids, strain1_3, strain2_3, noise_3, psd_sqrt))
+            return onp.sum(log_l, axis=0)
 
     def energy(self, evParams: ParamsTypeInput, res: int = 1000) -> np.ndarray:
         params = self._convert_parameters_default(evParams)
@@ -174,8 +176,8 @@ class GWSignalExtended(GWSignal):
 
 
 class DetNetExtended(DetNet):
-    def log_likelihood(self, params1: ParamsTypeInput, params2: ParamsTypeInput, res: int = 1000) -> np.ndarray:
+    def log_likelihood(self, params1: ParamsTypeInput, params2: ParamsTypeInput, res: int = 1000, noise_scale: float = 0.5) -> np.ndarray:
         log_l = {}
         for name, signal in self.signals.items():
-            log_l[name] = signal.waveform_log_likelihood(params1, params2, res)
-        return onp.sum(list(log_l.values()), axis=0)
+            log_l[name] = signal.waveform_log_likelihood(params1, params2, res, noise_scale=noise_scale)
+        return log_l

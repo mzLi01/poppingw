@@ -2,9 +2,10 @@ import numpy as np
 import pandas as pd
 from bilby import Likelihood
 
-from .cosmology import Cosmology, planck
-from .selection import BNSSelection
-from .redshift_prior import RedshiftPrior
+
+from ..cosmology import Cosmology, planck
+from ..selection import BNSSelection
+from ..redshift_prior import RedshiftPrior
 
 
 class BNSPopulation(Likelihood):
@@ -71,42 +72,3 @@ class BNSGaussianPosterior(BNSPopulation):
 
         pdL_value = np.exp(-0.5 * (log_dL_array - log_dL_obs)**2 / sigma_log_dL**2) / np.sqrt(2*np.pi) / sigma_log_dL
         return log_dL_array, pdL_value
-
-
-class BNSAmplitudePopulation(BNSPopulation):
-    def __init__(self, log_kappa_array: np.ndarray, p_log_kappa: np.ndarray, selection: BNSSelection, log_kappa_prior: RedshiftPrior, cosmo: Cosmology = planck):
-        super(BNSPopulation, self).__init__(parameters={key: None for key in ['N_total']+log_kappa_prior.parameter_keys})
-        self.log_kappa_array = log_kappa_array
-        self.p_log_kappa = p_log_kappa
-        self.N_obs = log_kappa_array.shape[1]
-
-        self.selection = selection
-        self.log_kappa_prior = log_kappa_prior
-        self.cosmo = cosmo
-
-        # handling infinite likelihood: happens when kappa posterior completely out of range
-        # change p_pop: p_pop_new = (1-N_inf/N_tot)*p_pop_old + 1/N_tot * Sum[Uniform(kappa_posterior_range)]
-        # for new p_pop, contribution of each out range events to log likelihood is log(1/(N_tot*(kappa_posterior_range_length))) --> doesn't really matter, same for all population parameters
-        outrange_mask = (self.log_kappa_array[-1] <= self.log_kappa_prior.z_range[0]) |\
-                        (self.log_kappa_array[0] >= self.log_kappa_prior.z_range[1])
-        self.outrange_id = np.where(outrange_mask)[0]
-        self.outrange_log_likelihood = -len(self.outrange_id) * np.log(self.N_obs) -\
-            np.sum(np.log(self.log_kappa_array[-1, self.outrange_id]-self.log_kappa_array[0, self.outrange_id]))
-        self.log_kappa_array = self.log_kappa_array[:, ~outrange_mask]
-        self.p_log_kappa = self.p_log_kappa[:, ~outrange_mask]
-
-    def log_likelihood_event_pop(self):
-        # p(d|\lambda) = \int p(d|K) p(K|\lambda) dK, here K=log(kappa)
-        p_log_kappa_pop = self.log_kappa_prior(self.log_kappa_array)
-        return np.log(np.trapz(self.p_log_kappa*p_log_kappa_pop, self.log_kappa_array, axis=0))
-
-    def log_likelihood(self):
-        self.log_kappa_prior.parameters = self.parameters
-        logp_events = self.log_likelihood_event_pop()
-        logp = np.sum(logp_events) + self.outrange_log_likelihood
-
-        alpha = self.selection.selection(self.log_kappa_prior)
-        N_det = self.parameters['N_total'] * alpha
-        logp -= self.N_obs * np.log(alpha)
-        logp += -N_det + self.N_obs*np.log(N_det)
-        return logp
