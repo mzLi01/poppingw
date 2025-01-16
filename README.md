@@ -1,6 +1,12 @@
 # PoppinGW
 **Pop**ulation **In**ference for **GW** detection
 
+## Installation
+
+```
+pip install poppingw
+```
+
 ## Usage
 
 The whole workflow includes generating mock GW events, calculating likelihood $\mathcal{L}(\kappa,\iota|d)$ for each events $\{d_i\}$, and perform population inference on events with SNR larger than a certain threshold value $\rho_{\rm thr}$. An example script [total_workflow.sh](example/total_workflow.sh) is provided to perform this whole procedure.
@@ -38,6 +44,6 @@ You can pass the argument `-disable-select` to disable selection effect, letting
 
 Cite our work:
 
-**Improving the detection sensitivity to primordial stochastic gravitational waves with reduced astrophysical foregrounds -- II: subthreshold binary neutron stars**, [Arxiv:2403.01846](https://arxiv.org/abs/2403.01846)
+**Improving the detection sensitivity to primordial stochastic gravitational waves with reduced astrophysical foregrounds. II. Subthreshold binary neutron stars**, [Arxiv:2403.01846](https://arxiv.org/abs/2403.01846) [PhysRevD.111.023009](https://doi.org/10.1103/PhysRevD.111.023009)
 
 if you find this code useful to you.

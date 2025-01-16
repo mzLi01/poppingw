@@ -6,6 +6,8 @@ authors = [
     {name = "Mingzheng Li",email = "limz01@sjtu.edu.cn"}
 ]
 readme = "README.md"
+homepage = "https://github.com/mzLi01/poppingw"
+repository = "https://github.com/mzLi01/poppingw"
 requires-python = ">=3.10"
 dependencies = [
     "bilby (>=2.2.0,<2.3.0)",
