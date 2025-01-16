@@ -1,0 +1,24 @@
+[project]
+name = "poppingw"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Mingzheng Li",email = "limz01@sjtu.edu.cn"}
+]
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "bilby (>=2.2.0,<2.3.0)",
+    "scipy (>=1.12.0,<1.13.0)",
+    "gwfast (>=1.1.2,<2.0.0)",
+    "h5py (>=3.12.1,<4.0.0)",
+    "astropy (>=6.0,<7.0)",
+    "pandas (>=2.2.3,<3.0.0)",
+    "tqdm (>=4.67.1,<5.0.0)",
+    "numba (>=0.60.0,<0.61.0)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
